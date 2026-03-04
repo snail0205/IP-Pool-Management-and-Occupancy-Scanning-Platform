@@ -1,0 +1,206 @@
+Day2 Express 项目手动搭建指南（自己敲一遍版）
+
+目标：
+在 Monorepo/server 下手动完成一个最小可运行的 Express 分层项目，
+并跑通以下接口：
+1) GET /health
+2) POST /api/pools
+3) GET /api/pools
+4) GET /api/pools/:id/ips
+
+----------------------------------------
+一、先准备（5-10分钟）
+----------------------------------------
+1. 打开终端，进入目录：
+   cd Monorepo/server
+
+2. 初始化项目：
+   npm init -y
+
+3. 安装依赖：
+   npm i express mysql2 dotenv cors helmet morgan
+   npm i -D nodemon
+
+4. 修改 package.json 脚本（手动改）：
+   "scripts": {
+     "dev": "nodemon src/server.js",
+     "start": "node src/server.js"
+   }
+
+5. 新建 .env 文件（不要提交到 git）：
+   PORT=3000
+   NODE_ENV=development
+   DB_HOST=127.0.0.1
+   DB_PORT=3306
+   DB_USER=root
+   DB_PASSWORD=你的密码
+   DB_NAME=ip_pool_platform
+
+----------------------------------------
+二、创建目录结构（10分钟）
+----------------------------------------
+在 Monorepo/server 下手动创建：
+
+src/
+  app.js
+  server.js
+  config/
+    env.js
+    db.js
+  routes/
+    index.js
+    pool.routes.js
+  controllers/
+    pool.controller.js
+  services/
+    pool.service.js
+  repositories/
+    pool.repo.js
+    result.repo.js
+  middlewares/
+    error.middleware.js
+  utils/
+    response.js
+    validator.js
+    cidr.js
+
+说明：
+Day2 先做 pool 相关，task/scan 可以 Day3 再加。
+
+----------------------------------------
+三、文件编写顺序（建议）
+----------------------------------------
+按这个顺序写，最不容易卡住：
+
+第1步：config
+1) src/config/env.js：读取 .env
+2) src/config/db.js：创建 mysql2 连接池
+
+第2步：utils + middlewares
+3) src/utils/response.js：统一 ok/fail 返回结构
+4) src/utils/validator.js：必填字段校验
+5) src/utils/cidr.js：CIDR 格式基础校验
+6) src/middlewares/error.middleware.js：404 + 全局错误处理
+
+第3步：repo -> service -> controller
+7) src/repositories/pool.repo.js：
+   - createPool()
+   - listPools()
+8) src/repositories/result.repo.js：
+   - listResultsByPoolId()
+9) src/services/pool.service.js：
+   - createPool()
+   - listPools()
+   - listPoolIps()
+10) src/controllers/pool.controller.js：
+   - createPool()
+   - listPools()
+   - listPoolIps()
+
+第4步：route + app + server
+11) src/routes/pool.routes.js：绑定三个接口
+12) src/routes/index.js：挂载 /pools
+13) src/app.js：中间件 + /health + /api
+14) src/server.js：启动服务 + 启动前测数据库连接
+
+----------------------------------------
+四、接口最小规范（先跑通，再完善）
+----------------------------------------
+1) POST /api/pools
+请求体：
+{
+  "name": "办公网A区",
+  "cidr": "10.0.0.0/24",
+  "includeNetworkAndBroadcast": false,
+  "initMode": "overwrite"
+}
+
+返回：
+{
+  "code": 0,
+  "message": "pool created",
+  "data": {
+    "poolId": 1,
+    "cidr": "10.0.0.0/24",
+    "totalIpCount": 0
+  }
+}
+
+2) GET /api/pools?page=1&pageSize=10
+返回分页数据（list + total）。
+
+3) GET /api/pools/:id/ips
+Day2 可先查 ip_scan_result 表；没有数据就返回：
+{
+  "code": 0,
+  "message": "ok",
+  "data": {
+    "page": 1,
+    "pageSize": 50,
+    "total": 0,
+    "list": []
+  }
+}
+
+----------------------------------------
+五、今晚3小时拆分执行（照着做）
+----------------------------------------
+20:00-20:30
+- npm 初始化 + 安装依赖 + .env + 建目录
+
+20:30-21:20
+- 写 env/db/response/error/validator/cidr
+- 跑通 GET /health
+
+21:20-22:10
+- 写 pool.repo + pool.service + pool.controller
+- 跑通 POST /api/pools 和 GET /api/pools
+
+22:10-22:40
+- 写 result.repo + listPoolIps
+- 跑通 GET /api/pools/:id/ips
+
+22:40-23:00
+- 自测 + 记录今天完成项（写到需求文档 Day2 记录）
+
+----------------------------------------
+六、自测清单（完成打勾）
+----------------------------------------
+[ ] npm run dev 能启动
+[ ] /health 返回 code=0
+[ ] POST /api/pools 可写入数据库
+[ ] GET /api/pools 有分页结果
+[ ] GET /api/pools/:id/ips 返回结构正确（允许空列表）
+[ ] 错误请求能返回统一错误结构（不是 HTML）
+
+----------------------------------------
+七、常见坑（提前避开）
+----------------------------------------
+1) 数据库连不上
+- 优先检查 .env 的 DB_HOST/PORT/USER/PASSWORD/DB_NAME
+- Navicat 能连不代表 Node 一定能连（端口和权限要一致）
+
+2) 路由路径写错
+- 统一用 /api/pools，不要写成 /api/tools
+
+3) JSON 解析失败
+- app.js 必须有 express.json()
+
+4) 控制器报错不进全局错误处理
+- controller 内用 try/catch + next(error)
+
+5) 表名或字段名不一致
+- 你在 Navicat 的表字段名要和 repo SQL 一一对应
+
+----------------------------------------
+八、Day2完成标准（你给自己打分）
+----------------------------------------
+达到以下条件就算 Day2 完成：
+1) 三个 pool 接口全部可测
+2) 返回结构统一
+3) 代码按 route/controller/service/repo 分层
+4) 你能口头解释每一层职责
+
+如果只完成了 70%，优先保住：
+POST /api/pools + GET /api/pools + /health
+其余挪到 Day3 晚上前 40 分钟补齐。

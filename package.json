@@ -1,0 +1,14 @@
+{
+  "name": "ip-pool-management-and-occupancy-scanning-platform",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "dev": "npm --prefix Monorepo/server run dev",
+    "start": "npm --prefix Monorepo/server run start"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": ""
+}
