@@ -2,6 +2,7 @@ const cron = require("node-cron");
 const poolRepo = require("../repositories/pool.repo");
 const taskRepo = require("../repositories/task.repo");
 const scanService = require("./scan.service");
+const alertService = require("./alert.service");
 const { getIpVersion, parseIpToBigInt } = require("../utils/ip-utils");
 
 const MAX_TASK_IPS = 65536;
@@ -98,6 +99,11 @@ async function processQueue() {
         await taskRepo.finishTaskFailed(taskId, error.message);
         await taskRepo.addTaskLog(taskId, "error", "task_failed", "task failed while running", {
           reason: error.message
+        });
+        await alertService.raiseTaskFailedAlert({
+          taskId,
+          poolId: task.poolId,
+          errorMsg: error.message
         });
         scanService.emitTaskEvent("scan_failed", {
           taskId,
@@ -241,17 +247,24 @@ async function listTaskLogs(taskId, query) {
   return taskRepo.listTaskLogs(taskId, query);
 }
 
+async function listRecentFailedTasks(query = {}) {
+  const limit = Math.min(Math.max(Number(query.limit || 10), 1), 100);
+  return taskRepo.listRecentFailedTasks(limit);
+}
+
 async function exportTaskLogsCsv(taskId) {
   const logs = await taskRepo.listTaskLogs(taskId, { page: 1, pageSize: 10000 });
-  const header = ["id", "taskId", "level", "eventType", "message", "createdAt"];
+  const header = ["id", "taskId", "level", "eventType", "message", "payloadJson", "createdAt"];
   const lines = [header.join(",")];
   logs.list.forEach((item) => {
+    const payload = typeof item.payloadJson === "string" ? item.payloadJson : JSON.stringify(item.payloadJson || {});
     const row = [
       item.id,
       item.taskId,
       item.level,
       item.eventType,
       `"${String(item.message || "").replace(/"/g, "\"\"")}"`,
+      `"${String(payload || "").replace(/"/g, "\"\"")}"`,
       item.createdAt
     ];
     lines.push(row.join(","));
@@ -335,6 +348,7 @@ module.exports = {
   terminateTask,
   listTasks,
   listTaskLogs,
+  listRecentFailedTasks,
   exportTaskLogsCsv,
   initScheduler
 };

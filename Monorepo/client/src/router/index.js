@@ -49,6 +49,30 @@ const routes = [
         name: 'ScanTasks',
         component: () => import('@/views/scan/TaskList.vue'),
         meta: { title: 'Scan Tasks' }
+      },
+      {
+        path: 'visual/screen',
+        name: 'VisualScreen',
+        component: () => import('@/views/visual/Screen.vue'),
+        meta: { title: 'Visual Screen' }
+      },
+      {
+        path: 'ops/center',
+        name: 'OpsCenter',
+        component: () => import('@/views/ops/Center.vue'),
+        meta: { title: 'Ops Center' }
+      },
+      {
+        path: 'reports/center',
+        name: 'ReportsCenter',
+        component: () => import('@/views/reports/Center.vue'),
+        meta: { title: 'Reports Center' }
+      },
+      {
+        path: 'system/settings',
+        name: 'SystemSettings',
+        component: () => import('@/views/system/Settings.vue'),
+        meta: { title: 'System Settings' }
       }
     ]
   }
@@ -62,8 +86,9 @@ const router = createRouter({
 router.beforeEach(async (to, from, next) => {
   const userStore = useUserStore()
   const token = userStore.token
+  const requiresAuth = to.matched.some(record => record.meta.requiresAuth)
 
-  if (to.meta.requiresAuth) {
+  if (requiresAuth) {
     if (!token) {
       next('/login')
     } else {
@@ -80,11 +105,7 @@ router.beforeEach(async (to, from, next) => {
       }
     }
   } else {
-    if (token && to.path === '/login') {
-      next('/')
-    } else {
-      next()
-    }
+    next()
   }
 })
 

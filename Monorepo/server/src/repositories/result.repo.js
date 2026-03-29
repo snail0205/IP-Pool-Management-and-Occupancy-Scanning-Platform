@@ -13,9 +13,9 @@ async function listResultsByPoolId({ poolId, page = 1, pageSize = 50, status, ke
     params.push(Number(status));
   }
   if (keyword) {
-    whereSql += " AND (r.ip LIKE ? OR IFNULL(b.device_name, '') LIKE ? OR IFNULL(r.mac, '') LIKE ? OR IFNULL(b.department, '') LIKE ?)";
+    whereSql += " AND (r.ip LIKE ? OR IFNULL(b.device_name, '') LIKE ? OR IFNULL(r.mac, '') LIKE ? OR IFNULL(b.department, '') LIKE ? OR IFNULL(b.owner, '') LIKE ?)";
     const kw = `%${keyword}%`;
-    params.push(kw, kw, kw, kw);
+    params.push(kw, kw, kw, kw, kw);
   }
 
   const [countRows] = await db.execute(

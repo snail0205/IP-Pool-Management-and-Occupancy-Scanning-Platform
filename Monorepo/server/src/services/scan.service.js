@@ -4,6 +4,7 @@ const poolRepo = require("../repositories/pool.repo");
 const resultRepo = require("../repositories/result.repo");
 const registryRepo = require("../repositories/registry.repo");
 const taskRepo = require("../repositories/task.repo");
+const alertService = require("./alert.service");
 const { getHostIpsFromCidr } = require("../utils/cidr");
 const { getIpVersion, generateRangeIps } = require("../utils/ip-utils");
 
@@ -101,6 +102,14 @@ async function processSingleIp({ taskId, poolId, ip, pingTimeoutMs, retryCount, 
     statusReason: status.statusReason,
     taskId
   });
+
+  if (["illegal_occupancy", "inconsistent_mac"].includes(status.statusReason)) {
+    await alertService.raiseOccupancyAlert({
+      poolId,
+      ip,
+      statusReason: status.statusReason
+    });
+  }
 
   emitTaskEvent("scan:ip-updated", {
     taskId,

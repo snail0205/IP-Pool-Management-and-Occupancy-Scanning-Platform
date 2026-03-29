@@ -268,10 +268,26 @@ async function listTaskLogs(taskId, query = {}) {
   const page = Math.max(Number(query.page || 1), 1);
   const pageSize = Math.min(Math.max(Number(query.pageSize || 50), 1), 200);
   const offset = (page - 1) * pageSize;
+  const params = [taskId];
+  let whereSql = "WHERE task_id = ?";
+
+  if (query.level) {
+    whereSql += " AND level = ?";
+    params.push(String(query.level));
+  }
+  if (query.eventType) {
+    whereSql += " AND event_type = ?";
+    params.push(String(query.eventType));
+  }
+  if (query.keyword) {
+    whereSql += " AND (message LIKE ? OR IFNULL(payload_json, '') LIKE ?)";
+    const kw = `%${String(query.keyword)}%`;
+    params.push(kw, kw);
+  }
 
   const [countRows] = await db.execute(
-    "SELECT COUNT(*) AS total FROM scan_task_log WHERE task_id = ?",
-    [taskId]
+    `SELECT COUNT(*) AS total FROM scan_task_log ${whereSql}`,
+    params
   );
   const [rows] = await db.execute(
     `
@@ -284,11 +300,11 @@ async function listTaskLogs(taskId, query = {}) {
         payload_json AS payloadJson,
         created_at AS createdAt
       FROM scan_task_log
-      WHERE task_id = ?
+      ${whereSql}
       ORDER BY id DESC
       LIMIT ${pageSize} OFFSET ${offset}
     `,
-    [taskId]
+    params
   );
 
   return {
@@ -297,6 +313,29 @@ async function listTaskLogs(taskId, query = {}) {
     total: countRows[0].total,
     list: rows
   };
+}
+
+async function listRecentFailedTasks(limit = 10) {
+  const safeLimit = Math.min(Math.max(Number(limit || 10), 1), 100);
+  const [rows] = await db.execute(
+    `
+      SELECT
+        t.id AS taskId,
+        t.pool_id AS poolId,
+        t.status,
+        t.error_msg AS errorMsg,
+        t.started_at AS startedAt,
+        t.ended_at AS endedAt,
+        t.created_at AS createdAt,
+        p.name AS poolName
+      FROM scan_task t
+      LEFT JOIN ip_pool p ON p.id = t.pool_id
+      WHERE t.status = 'failed'
+      ORDER BY t.id DESC
+      LIMIT ${safeLimit}
+    `
+  );
+  return rows;
 }
 
 module.exports = {
@@ -316,5 +355,6 @@ module.exports = {
   finishTaskFailed,
   finishTaskCancelled,
   addTaskLog,
-  listTaskLogs
+  listTaskLogs,
+  listRecentFailedTasks
 };

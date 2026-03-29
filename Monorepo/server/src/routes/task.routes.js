@@ -12,5 +12,6 @@ router.post("/:poolId/start", taskController.startScanTask);
 router.get("/tasks/:taskId", taskController.getTaskProgress);
 router.get("/tasks/:taskId/logs", taskController.listTaskLogs);
 router.get("/tasks/:taskId/logs/export", taskController.exportTaskLogs);
+router.get("/tasks/failures/recent", taskController.listRecentFailedTasks);
 
 module.exports = router;

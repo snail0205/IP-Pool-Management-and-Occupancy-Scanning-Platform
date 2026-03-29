@@ -2,11 +2,23 @@ const db = require("../config/db");
 const occupancyRepo = require("./occupancy.repo");
 
 async function getRegistryByPoolAndIp(poolId, ip) {
-  const [rows] = await db.execute(
-    "SELECT id, expected_mac AS expectedMac FROM ip_registry WHERE pool_id = ? AND ip = ? AND is_bound = 1 LIMIT 1",
-    [poolId, ip]
-  );
-  return rows[0] || null;
+  try {
+    const [rows] = await db.execute(
+      "SELECT id, expected_mac AS expectedMac FROM ip_registry WHERE pool_id = ? AND ip = ? AND is_bound = 1 LIMIT 1",
+      [poolId, ip]
+    );
+    return rows[0] || null;
+  } catch (error) {
+    // 兼容历史库：若 is_bound 列尚未迁移，降级为不带该条件的查询
+    if (error?.code === "ER_BAD_FIELD_ERROR" && String(error?.message || "").includes("is_bound")) {
+      const [rows] = await db.execute(
+        "SELECT id, expected_mac AS expectedMac FROM ip_registry WHERE pool_id = ? AND ip = ? LIMIT 1",
+        [poolId, ip]
+      );
+      return rows[0] || null;
+    }
+    throw error;
+  }
 }
 
 async function createBinding(poolId, payload) {
@@ -135,9 +147,9 @@ async function listBindings(poolId, query) {
     whereSql += " AND b.is_bound = 1";
   }
   if (keyword) {
-    whereSql += " AND (b.ip LIKE ? OR IFNULL(b.device_name, '') LIKE ? OR IFNULL(b.expected_mac, '') LIKE ? OR IFNULL(b.department, '') LIKE ?)";
+    whereSql += " AND (b.ip LIKE ? OR IFNULL(b.device_name, '') LIKE ? OR IFNULL(b.expected_mac, '') LIKE ? OR IFNULL(b.department, '') LIKE ? OR IFNULL(b.owner, '') LIKE ?)";
     const kw = `%${keyword}%`;
-    params.push(kw, kw, kw, kw);
+    params.push(kw, kw, kw, kw, kw);
   }
 
   const [countRows] = await db.execute(

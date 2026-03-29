@@ -19,6 +19,22 @@
             <el-icon><List /></el-icon>
             <span>扫描任务</span>
           </el-menu-item>
+          <el-menu-item index="/visual/screen">
+            <el-icon><DataBoard /></el-icon>
+            <span>可视化大屏</span>
+          </el-menu-item>
+          <el-menu-item index="/ops/center">
+            <el-icon><Bell /></el-icon>
+            <span>运维增强中心</span>
+          </el-menu-item>
+          <el-menu-item index="/reports/center">
+            <el-icon><DataAnalysis /></el-icon>
+            <span>报表中心</span>
+          </el-menu-item>
+          <el-menu-item index="/system/settings">
+            <el-icon><Setting /></el-icon>
+            <span>系统设置</span>
+          </el-menu-item>
         </el-menu>
       </el-aside>
       <el-container>
@@ -56,7 +72,7 @@ import { computed, ref } from 'vue'
 import { useUserStore } from '@/stores/user'
 import { useRouter, useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { Menu as IconMenu, Document, List, Search } from '@element-plus/icons-vue'
+import { Menu as IconMenu, Document, List, Search, Setting, DataBoard, Bell, DataAnalysis } from '@element-plus/icons-vue'
 
 
 const userStore = useUserStore()
@@ -88,16 +104,16 @@ const handleGlobalSearch = () => {
 
 <style scoped>
 .common-layout {
-  min-height: 100vh;
+  min-height: 100dvh;
   background: #f4f7fe;
 }
 .root-container {
-  min-height: 100vh;
+  min-height: 100dvh;
 }
 .aside {
   background: #0f172a;
   border-right: none;
-  min-height: 100vh;
+  min-height: 100dvh;
 }
 .aside-logo {
   height: 60px;
@@ -118,9 +134,11 @@ const handleGlobalSearch = () => {
   box-shadow: 0 0 10px rgba(59, 130, 246, 0.8);
 }
 .el-menu-vertical-demo {
-  height: calc(100vh - 60px);
+  height: calc(100dvh - 60px);
   border-right: none;
   background: transparent;
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 :deep(.el-menu) {
   background: transparent;
@@ -155,6 +173,8 @@ const handleGlobalSearch = () => {
 }
 .main {
   background: #f4f7fe;
+  min-width: 0;
+  overflow: auto;
 }
 .user-info {
   display: flex;

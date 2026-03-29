@@ -4,7 +4,7 @@ import { ElMessage } from 'element-plus'
 
 export const useUserStore = defineStore('user', {
   state: () => ({
-    token: localStorage.getItem('token') || '',
+    token: sessionStorage.getItem('token') || '',
     name: '',
     role: ''
   }),
@@ -14,7 +14,7 @@ export const useUserStore = defineStore('user', {
         const res = await login(userInfo)
         const token = res.token
         this.token = token
-        localStorage.setItem('token', token)
+        sessionStorage.setItem('token', token)
         ElMessage.success('Login success')
         return true
       } catch (error) {
@@ -44,7 +44,7 @@ export const useUserStore = defineStore('user', {
       this.token = ''
       this.name = ''
       this.role = ''
-      localStorage.removeItem('token')
+      sessionStorage.removeItem('token')
     }
   }
 })

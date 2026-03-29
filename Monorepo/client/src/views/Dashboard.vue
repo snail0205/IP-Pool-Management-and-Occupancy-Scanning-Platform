@@ -16,6 +16,7 @@
             <el-icon><Grid /></el-icon>
           </div>
           <div class="metric-value">{{ metrics.totalIp }}</div>
+          <div class="metric-sub">网段池 {{ metrics.poolCount }}</div>
         </el-card>
       </el-col>
       <el-col :xs="24" :sm="12" :md="12" :lg="6">
@@ -129,6 +130,9 @@
         <el-form-item label="名称">
           <el-input v-model="newPoolForm.name" placeholder="例如：办公网 A 区" />
         </el-form-item>
+        <el-form-item label="区域">
+          <el-input v-model="newPoolForm.region" placeholder="例如：北京海淀" />
+        </el-form-item>
         <el-form-item label="CIDR">
           <el-input v-model="newPoolForm.cidr" placeholder="例如：10.0.0.0/24" />
         </el-form-item>
@@ -174,6 +178,7 @@ import * as echarts from 'echarts'
 import { getPoolList, createPool } from '@/api/pool'
 import { listScanTasks, startScan } from '@/api/scan'
 import { getOccupancyReport, exportOccupancyExcel, exportOccupancyPdf } from '@/api/occupancy'
+import { getSystemSettings } from '@/api/system'
 
 const router = useRouter()
 const userStore = useUserStore()
@@ -184,7 +189,8 @@ const metrics = reactive({
   totalIp: 0,
   occupied: 0,
   online: 0,
-  abnormalTasks: 0
+  abnormalTasks: 0,
+  poolCount: 0
 })
 
 const recentTasks = ref([])
@@ -194,6 +200,7 @@ const poolOptions = ref([])
 const newPoolVisible = ref(false)
 const newPoolForm = reactive({
   name: '',
+  region: '',
   cidr: '',
   networkType: 'IPv4'
 })
@@ -210,13 +217,14 @@ const ringChartRef = ref(null)
 let barChart = null
 let lineChart = null
 let ringChart = null
+let refreshTimer = null
 
 function formatTime(t) {
   if (!t) return '-'
   return new Date(t).toLocaleString('zh-CN')
 }
 
-function build24hSeries(tasks, usage) {
+function build24hSeries(tasks) {
   const now = new Date()
   const labels = []
   const counts = []
@@ -236,12 +244,6 @@ function build24hSeries(tasks, usage) {
     const idx = 23 - diffHours
     counts[idx] += 1
   })
-  const usageRate = Number(usage?.usageRate || 0)
-  const baseScale = usageRate > 0 ? Math.min(3, Math.max(1, Math.round(usageRate / 25))) : 1
-  for (let i = 0; i < counts.length; i += 1) {
-    const wave = (Math.sin((i / 24) * Math.PI * 2 - 1.2) + 1) / 2
-    counts[i] += Math.round(wave * baseScale)
-  }
   return { labels, counts }
 }
 
@@ -265,9 +267,9 @@ function setBarChart(usage) {
   })
 }
 
-function setLineChart(tasks, usage) {
+function setLineChart(tasks) {
   if (!lineChart) return
-  const { labels, counts } = build24hSeries(tasks, usage)
+  const { labels, counts } = build24hSeries(tasks)
   lineChart.setOption({
     tooltip: { trigger: 'axis' },
     grid: { left: 40, right: 20, top: 30, bottom: 30 },
@@ -318,13 +320,21 @@ function initCharts() {
   if (ringChartRef.value && !ringChart) ringChart = echarts.init(ringChartRef.value)
 }
 
-function resizeCharts() {
-  barChart?.resize()
-  lineChart?.resize()
-  ringChart?.resize()
-}
+let rafId = null
 
-function downloadBlob(blob, fileName) {
+function resizeCharts() {
+  if (document.hidden) return
+    if (rafId) cancelAnimationFrame(rafId)
+    rafId = requestAnimationFrame(() => {
+      if (barChartRef.value && barChartRef.value.clientWidth > 0) {
+        barChart?.resize()
+        lineChart?.resize()
+        ringChart?.resize()
+      }
+    })
+  }
+
+  function downloadBlob(blob, fileName) {
   const url = window.URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url
@@ -336,10 +346,12 @@ function downloadBlob(blob, fileName) {
 async function loadDashboardData() {
   loading.value = true
   try {
+    const settings = await getSystemSettings().catch(() => ({}))
+    const ts = Date.now()
     const [report, taskData, poolData] = await Promise.all([
-      getOccupancyReport({}),
-      listScanTasks({ page: 1, pageSize: 200 }),
-      getPoolList({ page: 1, pageSize: 200 })
+      getOccupancyReport({ _t: ts }),
+      listScanTasks({ page: 1, pageSize: 200, _t: ts }),
+      getPoolList({ page: 1, pageSize: 200, _t: ts })
     ])
 
     poolOptions.value = poolData.list || []
@@ -354,10 +366,17 @@ async function loadDashboardData() {
     metrics.occupied = occupied
     metrics.online = occupied
     metrics.abnormalTasks = abnormalTaskCount
+    metrics.poolCount = Number(poolData.total || 0)
 
     setBarChart(usage)
-    setLineChart(allTasks.value, usage)
+    setLineChart(allTasks.value)
     setRingChart(usage.usageRate)
+
+    const nextSec = Number(settings.dashboardAutoRefreshSec || 30)
+    if (refreshTimer) clearInterval(refreshTimer)
+    refreshTimer = setInterval(() => {
+      loadDashboardData()
+    }, Math.max(5, nextSec) * 1000)
   } finally {
     loading.value = false
   }
@@ -372,6 +391,7 @@ async function handleCreatePool() {
   try {
     await createPool({
       name: newPoolForm.name,
+      region: newPoolForm.region,
       cidr: newPoolForm.cidr,
       networkType: newPoolForm.networkType,
       enabled: true
@@ -379,9 +399,14 @@ async function handleCreatePool() {
     ElMessage.success('网段创建成功')
     newPoolVisible.value = false
     newPoolForm.name = ''
+    newPoolForm.region = ''
     newPoolForm.cidr = ''
     await loadDashboardData()
     router.push('/pools')
+  } catch (error) {
+    console.error('Create pool failed:', error)
+    const msg = error.response?.data?.message || error.message || '创建失败'
+    ElMessage.error(msg)
   } finally {
     actionLoading.value = false
   }
@@ -421,7 +446,7 @@ async function handleExport(type) {
 }
 
 function handleSystemSettings() {
-  ElMessage.info('系统设置模块可作为下一步开发项')
+  router.push('/system/settings')
 }
 
 onMounted(async () => {
@@ -432,6 +457,10 @@ onMounted(async () => {
 })
 
 onUnmounted(() => {
+  if (refreshTimer) {
+    clearInterval(refreshTimer)
+    refreshTimer = null
+  }
   window.removeEventListener('resize', resizeCharts)
   barChart?.dispose()
   lineChart?.dispose()
@@ -446,7 +475,9 @@ onUnmounted(() => {
 .dashboard-container {
   padding: 18px;
   background: #f4f7fe;
-  min-height: calc(100vh - 60px);
+  min-height: calc(100dvh - 60px);
+  box-sizing: border-box;
+  overflow-x: auto;
 }
 .dashboard-head {
   display: flex;
@@ -483,6 +514,11 @@ onUnmounted(() => {
   line-height: 1;
   margin-top: 14px;
   font-weight: 700;
+}
+.metric-sub {
+  margin-top: 8px;
+  color: #64748b;
+  font-size: 12px;
 }
 .blue .metric-value { color: #2563eb; }
 .orange .metric-value { color: #f59e0b; }

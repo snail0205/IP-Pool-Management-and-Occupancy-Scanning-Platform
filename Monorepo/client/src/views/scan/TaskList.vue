@@ -1,5 +1,17 @@
 <template>
   <div class="app-container">
+    <el-alert
+      v-if="recentFailed.length"
+      type="error"
+      :closable="false"
+      show-icon
+      class="failed-alert"
+    >
+      <template #title>
+        近期开启失败任务：{{ recentFailed.map(x => `#${x.taskId}`).join(', ') }}
+      </template>
+    </el-alert>
+
     <div class="filter-container">
       <el-input v-model="query.poolId" placeholder="池 ID" clearable style="width: 100px; margin-right: 8px;" />
       <el-select v-model="query.status" placeholder="状态" clearable style="width: 120px; margin-right: 8px;">
@@ -63,12 +75,52 @@
         <p>在线 {{ currentTask.onlineCount ?? 0 }}，冲突 {{ currentTask.conflictCount ?? 0 }}</p>
       </template>
     </el-dialog>
+
+    <el-dialog v-model="logsVisible" :title="`任务 #${currentLogTaskId} 日志`" width="980px">
+      <div class="log-toolbar">
+        <el-select v-model="logQuery.level" clearable placeholder="级别" style="width: 120px;">
+          <el-option label="INFO" value="info" />
+          <el-option label="WARN" value="warn" />
+          <el-option label="ERROR" value="error" />
+        </el-select>
+        <el-input v-model="logQuery.eventType" clearable placeholder="事件类型" style="width: 160px;" />
+        <el-input v-model="logQuery.keyword" clearable placeholder="关键字(message/payload)" style="width: 260px;" />
+        <el-button type="primary" @click="fetchLogs">筛选</el-button>
+        <el-button @click="handleExportLogs">导出 CSV</el-button>
+      </div>
+
+      <el-table v-loading="logsLoading" :data="logList" border style="width: 100%; margin-top: 12px;" max-height="420">
+        <el-table-column label="ID" prop="id" width="80" />
+        <el-table-column label="级别" prop="level" width="100" />
+        <el-table-column label="事件" prop="eventType" width="170" show-overflow-tooltip />
+        <el-table-column label="消息" prop="message" min-width="220" show-overflow-tooltip />
+        <el-table-column label="Payload" min-width="260">
+          <template #default="{ row }">
+            <span class="mono">{{ formatPayload(row.payloadJson) }}</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="时间" width="170">
+          <template #default="{ row }">{{ formatTime(row.createdAt) }}</template>
+        </el-table-column>
+      </el-table>
+
+      <el-pagination
+        v-model:current-page="logPage"
+        v-model:page-size="logPageSize"
+        :total="logTotal"
+        :page-sizes="[20, 50, 100]"
+        layout="total, sizes, prev, pager, next"
+        style="margin-top: 12px; justify-content: flex-end;"
+        @size-change="fetchLogs"
+        @current-change="fetchLogs"
+      />
+    </el-dialog>
   </div>
 </template>
 
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
-import { listScanTasks, getScanTask } from '@/api/scan'
+import { listScanTasks, getScanTask, listTaskLogs, exportTaskLogs, listRecentFailedTasks } from '@/api/scan'
 import { ElMessage } from 'element-plus'
 
 const loading = ref(false)
@@ -80,6 +132,20 @@ const query = reactive({ poolId: '', status: '' })
 
 const progressVisible = ref(false)
 const currentTask = ref(null)
+const recentFailed = ref([])
+
+const logsVisible = ref(false)
+const currentLogTaskId = ref(null)
+const logsLoading = ref(false)
+const logList = ref([])
+const logTotal = ref(0)
+const logPage = ref(1)
+const logPageSize = ref(20)
+const logQuery = reactive({
+  level: '',
+  eventType: '',
+  keyword: ''
+})
 
 function formatTime(t) {
   if (!t) return '-'
@@ -107,6 +173,14 @@ async function fetchData() {
   }
 }
 
+async function fetchRecentFailed() {
+  try {
+    recentFailed.value = await listRecentFailedTasks({ limit: 5 })
+  } catch (err) {
+    console.error(err)
+  }
+}
+
 async function handleViewProgress(row) {
   try {
     currentTask.value = await getScanTask(row.taskId)
@@ -117,11 +191,67 @@ async function handleViewProgress(row) {
 }
 
 function handleViewLogs(row) {
-  ElMessage.info('日志功能可接 listTaskLogs 或新页面')
+  currentLogTaskId.value = row.taskId
+  logPage.value = 1
+  logsVisible.value = true
+  fetchLogs()
+}
+
+function formatPayload(payload) {
+  if (!payload) return '-'
+  if (typeof payload === 'string') return payload
+  try {
+    return JSON.stringify(payload)
+  } catch {
+    return '-'
+  }
+}
+
+async function fetchLogs() {
+  if (!currentLogTaskId.value) return
+  logsLoading.value = true
+  try {
+    const data = await listTaskLogs(currentLogTaskId.value, {
+      page: logPage.value,
+      pageSize: logPageSize.value,
+      level: logQuery.level || undefined,
+      eventType: logQuery.eventType || undefined,
+      keyword: logQuery.keyword || undefined
+    })
+    logList.value = data.list || []
+    logTotal.value = data.total || 0
+  } catch (err) {
+    console.error(err)
+    ElMessage.error('获取日志失败')
+  } finally {
+    logsLoading.value = false
+  }
+}
+
+function downloadBlob(blob, fileName) {
+  const url = window.URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = fileName
+  a.click()
+  window.URL.revokeObjectURL(url)
+}
+
+async function handleExportLogs() {
+  if (!currentLogTaskId.value) return
+  try {
+    const blob = await exportTaskLogs(currentLogTaskId.value)
+    downloadBlob(blob, `task-${currentLogTaskId.value}-logs.csv`)
+    ElMessage.success('日志已导出')
+  } catch (err) {
+    console.error(err)
+    ElMessage.error('导出失败')
+  }
 }
 
 onMounted(() => {
   fetchData()
+  fetchRecentFailed()
 })
 </script>
 
@@ -129,9 +259,21 @@ onMounted(() => {
 .app-container {
   padding: 20px;
 }
+.failed-alert {
+  margin-bottom: 12px;
+}
 .filter-container {
   margin-bottom: 16px;
   display: flex;
   align-items: center;
+}
+.log-toolbar {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.mono {
+  font-family: Consolas, Monaco, monospace;
+  font-size: 12px;
 }
 </style>

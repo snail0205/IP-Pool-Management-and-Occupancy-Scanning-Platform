@@ -80,6 +80,15 @@ async function listTaskLogs(req, res, next) {
   }
 }
 
+async function listRecentFailedTasks(req, res, next) {
+  try {
+    const data = await taskService.listRecentFailedTasks(req.query);
+    res.json(ok("ok", data));
+  } catch (error) {
+    next(error);
+  }
+}
+
 async function exportTaskLogs(req, res, next) {
   try {
     const taskId = Number(req.params.taskId);
@@ -101,5 +110,6 @@ module.exports = {
   terminateTask,
   listTasks,
   listTaskLogs,
+  listRecentFailedTasks,
   exportTaskLogs
 };

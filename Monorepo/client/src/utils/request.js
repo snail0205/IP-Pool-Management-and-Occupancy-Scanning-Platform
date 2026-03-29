@@ -6,10 +6,10 @@ const service = axios.create({
   timeout: 10000
 })
 
-// Request interceptor
+// Request interceptor（与 stores/user 一致：token 存在 sessionStorage）
 service.interceptors.request.use(
   config => {
-    const token = localStorage.getItem('token')
+    const token = sessionStorage.getItem('token')
     if (token) {
       config.headers['Authorization'] = `Bearer ${token}`
     }

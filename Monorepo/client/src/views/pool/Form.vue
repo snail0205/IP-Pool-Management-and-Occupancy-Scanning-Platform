@@ -8,7 +8,11 @@
       </template>
       <el-form ref="formRef" :model="form" :rules="rules" label-width="120px">
         <el-form-item label="名称" prop="name">
-          <el-input v-model="form.name" placeholder="如：办公网 A 区" />
+          <el-input v-model="form.name" placeholder="如:办公网 A 区" />
+        </el-form-item>
+
+        <el-form-item label="区域" prop="region">
+          <el-input v-model="form.region" placeholder="如:北京海淀" />
         </el-form-item>
 
         <el-form-item label="网络类型" prop="networkType">
@@ -19,33 +23,33 @@
         </el-form-item>
 
         <el-form-item label="CIDR" prop="cidr">
-          <el-input v-model="form.cidr" placeholder="如：192.168.1.0/24" />
-          <span class="help-block">可选；若填写 CIDR，系统会自动计算起止 IP</span>
+          <el-input v-model="form.cidr" placeholder="如:192.168.1.0/24" />
+          <span class="help-block">可选；若填写 CIDR,系统会自动计算起止 IP</span>
         </el-form-item>
 
         <el-row :gutter="20">
           <el-col :span="12">
             <el-form-item label="起始 IP" prop="startIp">
-              <el-input v-model="form.startIp" placeholder="如：192.168.1.1" />
+              <el-input v-model="form.startIp" placeholder="如:192.168.1.1" />
             </el-form-item>
           </el-col>
           <el-col :span="12">
             <el-form-item label="结束 IP" prop="endIp">
-              <el-input v-model="form.endIp" placeholder="如：192.168.1.254" />
+              <el-input v-model="form.endIp" placeholder="如:192.168.1.254" />
             </el-form-item>
           </el-col>
         </el-row>
 
         <el-form-item label="子网掩码" prop="subnetMask">
-          <el-input v-model="form.subnetMask" placeholder="如：255.255.255.0" />
+          <el-input v-model="form.subnetMask" placeholder="如:255.255.255.0" />
         </el-form-item>
 
         <el-form-item label="网关" prop="gateway">
-          <el-input v-model="form.gateway" placeholder="如：192.168.1.1" />
+          <el-input v-model="form.gateway" placeholder="如:192.168.1.1" />
         </el-form-item>
 
         <el-form-item label="DNS" prop="dns">
-          <el-input v-model="form.dns" placeholder="如：8.8.8.8, 8.8.4.4" />
+          <el-input v-model="form.dns" placeholder="如:8.8.8.8, 8.8.4.4" />
         </el-form-item>
 
         <el-form-item label="启用" prop="enabled">
@@ -77,6 +81,7 @@ const poolId = computed(() => Number(route.params.id))
 
 const form = reactive({
   name: '',
+  region: '',
   networkType: 'IPv4',
   cidr: '',
   startIp: '',
@@ -97,8 +102,9 @@ async function loadPool() {
   try {
     const p = await getPoolDetail(poolId.value)
     if (p) {
-      form.name = p.name ?? ''
-      form.networkType = p.networkType ?? 'IPv4'
+        form.name = p.name ?? ''
+        form.region = p.region ?? ''
+        form.networkType = p.networkType ?? 'IPv4'
       form.cidr = p.cidr ?? ''
       form.startIp = p.startIp ?? ''
       form.endIp = p.endIp ?? ''

@@ -149,7 +149,17 @@ async function ensureIpInPoolRange(pool, ip) {
 
 async function createPool(payload){
   const normalized = validatePoolPayload(payload);
-  const data = await poolRepo.createPool(normalized);
+  let data;
+  try {
+    data = await poolRepo.createPool(normalized);
+  } catch (err) {
+    if (err.code === 'ER_DUP_ENTRY' || (err.message && err.message.includes('Duplicate entry'))) {
+      const conflictErr = new Error("网段 CIDR 或名称已存在，请勿重复创建");
+      conflictErr.status = 409;
+      throw conflictErr;
+    }
+    throw err;
+  }
 
   let ips = [];
   if (normalized.cidr) {

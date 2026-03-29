@@ -71,32 +71,62 @@ async function searchOccupancy(query = {}) {
 }
 
 async function getOccupancyDetail(poolId, ip) {
-  const [rows] = await db.execute(
-    `
-      SELECT
-        r.pool_id AS poolId,
-        r.ip,
-        r.host_name AS hostName,
-        r.os_name AS osName,
-        r.open_ports AS openPorts,
-        CASE WHEN r.is_alive = 1 THEN 'connected' ELSE 'disconnected' END AS connectionStatus,
-        r.status_code AS statusCode,
-        r.status_reason AS statusReason,
-        r.mac AS currentMac,
-        r.last_scan_time AS lastScanTime,
-        b.expected_mac AS expectedMac,
-        b.device_name AS deviceName,
-        b.department,
-        b.owner,
-        b.purpose
-      FROM ip_scan_result r
-      LEFT JOIN ip_registry b ON b.pool_id = r.pool_id AND b.ip = r.ip AND b.is_bound = 1
-      WHERE r.pool_id = ? AND r.ip = ?
-      LIMIT 1
-    `,
-    [poolId, ip]
-  );
-  return rows[0] || null;
+  const sqlWithBound = `
+    SELECT
+      r.pool_id AS poolId,
+      r.ip,
+      NULL AS hostName,
+      NULL AS osName,
+      r.open_ports AS openPorts,
+      CASE WHEN r.is_alive = 1 THEN 'connected' ELSE 'disconnected' END AS connectionStatus,
+      r.status_code AS statusCode,
+      r.status_reason AS statusReason,
+      r.mac AS currentMac,
+      r.last_scan_time AS lastScanTime,
+      b.expected_mac AS expectedMac,
+      b.device_name AS deviceName,
+      b.department,
+      b.owner,
+      b.purpose
+    FROM ip_scan_result r
+    LEFT JOIN ip_registry b ON b.pool_id = r.pool_id AND b.ip = r.ip AND b.is_bound = 1
+    WHERE r.pool_id = ? AND r.ip = ?
+    LIMIT 1
+  `;
+
+  try {
+    const [rows] = await db.execute(sqlWithBound, [poolId, ip]);
+    return rows[0] || null;
+  } catch (error) {
+    // 兼容历史库：若 is_bound 缺失，回退到不带绑定状态条件的查询
+    if (error?.code === "ER_BAD_FIELD_ERROR" && String(error?.message || "").includes("is_bound")) {
+      const sqlFallback = `
+        SELECT
+          r.pool_id AS poolId,
+          r.ip,
+          NULL AS hostName,
+          NULL AS osName,
+          r.open_ports AS openPorts,
+          CASE WHEN r.is_alive = 1 THEN 'connected' ELSE 'disconnected' END AS connectionStatus,
+          r.status_code AS statusCode,
+          r.status_reason AS statusReason,
+          r.mac AS currentMac,
+          r.last_scan_time AS lastScanTime,
+          b.expected_mac AS expectedMac,
+          b.device_name AS deviceName,
+          b.department,
+          b.owner,
+          b.purpose
+        FROM ip_scan_result r
+        LEFT JOIN ip_registry b ON b.pool_id = r.pool_id AND b.ip = r.ip
+        WHERE r.pool_id = ? AND r.ip = ?
+        LIMIT 1
+      `;
+      const [rows] = await db.execute(sqlFallback, [poolId, ip]);
+      return rows[0] || null;
+    }
+    throw error;
+  }
 }
 
 async function listHistory(query = {}) {
